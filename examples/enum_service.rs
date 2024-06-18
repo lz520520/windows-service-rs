@@ -10,10 +10,21 @@ fn main() -> windows_service::Result<()> {
     let service_manager = ServiceManager::local_computer(None::<&str>, manager_access)?;
 
     let services =  service_manager.enum_service(ServiceAccess::QUERY_CONFIG | ServiceAccess::QUERY_STATUS)?;
+    println!("count: {}", services.len());
     for service in services {
-        let config = service.query_config()?;
-        let status = service.query_status()?;
-        println!("name: {}, display name: {:?}, pid: {}", service.get_name().unwrap_or_default(),  config.display_name, status.process_id.unwrap_or_default());
+        let config = match service.query_config() {
+            Ok(val) => val,
+            Err(_) => {continue}
+        };
+        let status = match service.query_status() {
+            Ok(val) => val,
+            Err(_) => {continue}
+        };
+        println!("name: {}, display name: {:?}, service type: {:?},  pid: {}",
+                 service.get_name().unwrap_or_default(),
+                 config.display_name,
+                 config.service_type,
+                 status.process_id.unwrap_or_default());
     }
     println!("over");
     Ok(())
