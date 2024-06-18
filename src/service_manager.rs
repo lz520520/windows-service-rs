@@ -5,7 +5,7 @@ use std::{io, ptr};
 use widestring::WideCString;
 use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, FALSE, GetLastError};
 use windows_sys::Win32::System::Services;
-use windows_sys::Win32::System::Services::{CloseServiceHandle, ENUM_SERVICE_STATUS_PROCESSW, EnumServicesStatusExW, SC_ENUM_PROCESS_INFO, SERVICE_STATE_ALL, SERVICE_WIN32};
+use windows_sys::Win32::System::Services::{CloseServiceHandle, ENUM_SERVICE_STATUS_PROCESSW, EnumServicesStatusExW, SC_ENUM_PROCESS_INFO, SERVICE_DRIVER, SERVICE_STATE_ALL, SERVICE_WIN32};
 
 use crate::sc_handle::ScHandle;
 use crate::service::{to_wide, RawServiceInfo, Service, ServiceAccess, ServiceInfo};
@@ -218,7 +218,7 @@ impl ServiceManager {
         }
     }
 
-    pub fn enum_service(&self, request_access: ServiceAccess) -> Result<Vec<Service>> {
+    pub fn  enum_service(&self, request_access: ServiceAccess) -> Result<Vec<Service>> {
         let mut result_services = Vec::<Service>::new();
         unsafe {
             let mut bytes_needed = 0;
@@ -228,7 +228,7 @@ impl ServiceManager {
             let result = EnumServicesStatusExW(
                 self.manager_handle.raw_handle(),
                 SC_ENUM_PROCESS_INFO,
-                SERVICE_WIN32,
+                SERVICE_WIN32 | SERVICE_DRIVER,
                 SERVICE_STATE_ALL,
                 ptr::null_mut(),
                 0,
@@ -249,7 +249,7 @@ impl ServiceManager {
             let result = EnumServicesStatusExW(
                 self.manager_handle.raw_handle(),
                 SC_ENUM_PROCESS_INFO,
-                SERVICE_WIN32,
+                SERVICE_WIN32 | SERVICE_DRIVER,
                 SERVICE_STATE_ALL,
                 p_buffer as *mut _,
                 buffer_size as u32,
@@ -276,7 +276,8 @@ impl ServiceManager {
                 );
 
                 if service_handle == 0 {
-                    return Err(Error::Winapi(io::Error::last_os_error()))
+                    continue;
+                    // return Err(Error::Winapi(io::Error::last_os_error()))
                 }
                 result_services.push(Service::new_with_name(ScHandle::new(service_handle), service_name.to_string_lossy()))
                 // println!("Service Name: {}, Display Name: {}, Pid: {}", service_name, display_name, service.ServiceStatusProcess.dwProcessId);
