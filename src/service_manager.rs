@@ -3,7 +3,9 @@ use std::os::windows::ffi::OsStringExt;
 use std::{io, ptr};
 
 use widestring::WideCString;
+use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, FALSE, GetLastError};
 use windows_sys::Win32::System::Services;
+use windows_sys::Win32::System::Services::{CloseServiceHandle, ENUM_SERVICE_STATUS_PROCESSW, EnumServicesStatusExW, SC_ENUM_PROCESS_INFO, SERVICE_STATE_ALL, SERVICE_WIN32};
 
 use crate::sc_handle::ScHandle;
 use crate::service::{to_wide, RawServiceInfo, Service, ServiceAccess, ServiceInfo};
@@ -214,6 +216,74 @@ impl ServiceManager {
         } else {
             Ok(Service::new(unsafe { ScHandle::new(service_handle) }))
         }
+    }
+
+    pub fn enum_service(&self, request_access: ServiceAccess) -> Result<Vec<Service>> {
+        let mut result_services = Vec::<Service>::new();
+        unsafe {
+            let mut bytes_needed = 0;
+            let mut services_returned = 0;
+            let mut resume_handle: u32 = 0;
+            // 查询所需缓冲区的大小
+            let result = EnumServicesStatusExW(
+                self.manager_handle.raw_handle(),
+                SC_ENUM_PROCESS_INFO,
+                SERVICE_WIN32,
+                SERVICE_STATE_ALL,
+                ptr::null_mut(),
+                0,
+                &mut bytes_needed,
+                &mut services_returned,
+                &mut resume_handle,
+                ptr::null(),
+            );
+            if result == FALSE && GetLastError() != ERROR_MORE_DATA {
+                return Err(Error::Winapi(io::Error::last_os_error()))
+            }
+            // 分配所需的缓冲区
+            let buffer_size = bytes_needed as usize;
+            let buffer = Vec::<u8>::with_capacity(buffer_size);
+            let p_buffer = buffer.as_ptr() as *mut ENUM_SERVICE_STATUS_PROCESSW;
+
+            // 实际的枚举服务调用
+            let result = EnumServicesStatusExW(
+                self.manager_handle.raw_handle(),
+                SC_ENUM_PROCESS_INFO,
+                SERVICE_WIN32,
+                SERVICE_STATE_ALL,
+                p_buffer as *mut _,
+                buffer_size as u32,
+                &mut bytes_needed,
+                &mut services_returned,
+                &mut resume_handle,
+                ptr::null(),
+            );
+            if result == FALSE {
+                return Err(Error::Winapi(io::Error::last_os_error()))
+            }
+            let services: &[ENUM_SERVICE_STATUS_PROCESSW] = std::slice::from_raw_parts(p_buffer, services_returned as usize);
+
+
+            for service in services.iter() {
+
+                let service_name = WideCString::from_ptr_str(service.lpServiceName);
+                // let display_name = WideCString::from_ptr_str(service.lpDisplayName);
+
+                let service_handle = Services::OpenServiceW(
+                    self.manager_handle.raw_handle(),
+                    service_name.as_ptr(),
+                    request_access.bits(),
+                );
+
+                if service_handle == 0 {
+                    return Err(Error::Winapi(io::Error::last_os_error()))
+                }
+                result_services.push(Service::new_with_name(ScHandle::new(service_handle), service_name.to_string_lossy()))
+                // println!("Service Name: {}, Display Name: {}, Pid: {}", service_name, display_name, service.ServiceStatusProcess.dwProcessId);
+            }
+
+        }
+        Ok(result_services)
     }
 
     /// Return the service name given a service display name.

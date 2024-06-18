@@ -1445,13 +1445,16 @@ pub enum ServiceSidType {
 /// [`ServiceManager`]: super::service_manager::ServiceManager
 pub struct Service {
     service_handle: ScHandle,
+    service_name: Option<String>,
 }
 
 impl Service {
     pub(crate) fn new(service_handle: ScHandle) -> Self {
-        Service { service_handle }
+        Service { service_handle, service_name: None }
     }
-
+    pub(crate) fn new_with_name(service_handle: ScHandle, service_name: String) -> Self {
+        Service { service_handle, service_name: Some(service_name) }
+    }
     /// Provides access to the underlying system service handle
     pub fn raw_handle(&self) -> Services::SC_HANDLE {
         self.service_handle.raw_handle()
@@ -1504,6 +1507,9 @@ impl Service {
     /// Stop the service.
     pub fn stop(&self) -> crate::Result<ServiceStatus> {
         self.send_control_command(ServiceControl::Stop)
+    }
+    pub fn get_name(&self) -> Option<String> {
+        self.service_name.clone()
     }
 
     /// Pause the service.
