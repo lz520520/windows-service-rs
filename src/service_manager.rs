@@ -275,7 +275,7 @@ impl ServiceManager {
                     request_access.bits(),
                 );
 
-                if service_handle == 0 {
+                if service_handle.is_null() {
                     continue;
                     // return Err(Error::Winapi(io::Error::last_os_error()))
                 }
